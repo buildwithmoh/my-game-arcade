@@ -1,0 +1,177 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Lakki Reddy', cursive;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+#app-root {
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+@keyframes characterGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 220, 50, 1))
+            drop-shadow(0 0 24px rgba(255, 170, 0, 0.85))
+            drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(255, 240, 100, 1))
+            drop-shadow(0 0 40px rgba(255, 200, 0, 1))
+            drop-shadow(0 0 12px rgba(255, 255, 200, 0.8));
+  }
+}
+.char-selected {
+  animation: characterGlow 1.6s ease-in-out infinite;
+  transform: scale(1.05);
+}
+.char-unselected {
+  filter: brightness(0.72) saturate(0.6);
+  transform: scale(1);
+  transition: filter 0.2s, transform 0.2s;
+}
+
+@keyframes pulse-prompt {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+@keyframes gameover-popin {
+  0%   { transform: scale(0.68); opacity: 0; }
+  65%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+@keyframes gameover-wobble {
+  0%, 100% { transform: rotate(-5deg) translateY(0); }
+  25%       { transform: rotate(5deg)  translateY(-4px); }
+  75%       { transform: rotate(-3deg) translateY(-2px); }
+}
+@keyframes gameover-star-spin {
+  from { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.15); }
+  to   { transform: rotate(360deg) scale(1); }
+}
+
+.card { position: relative; width: 620px; }
+
+.card-logo {
+  position: absolute;
+  top: -27px;
+  left: 299px;
+  transform: translateX(-50%);
+  width: 272px;
+  z-index: 7;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.4));
+}
+
+.card-frame {
+  width: 100%;
+  display: block;
+  position: relative;
+  z-index: 5;
+}
+
+.card-interior {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  bottom: 34px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.hud-pill {
+  background: rgba(0, 0, 0, 0.30);
+  border: 1.5px solid rgba(255, 255, 255, 0.26);
+  border-radius: 20px;
+  padding: 5px 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Lakki Reddy', cursive;
+  font-size: 14px;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.hud-pill .icon { font-size: 15px; }
+
+.hud-pill--light {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+  padding: 4px 12px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.hud-pill--light .icon { font-size: 16px; }
+
+.prejump-prompt {
+  position: absolute;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 24px;
+  padding: 8px 26px;
+  font-family: 'Lakki Reddy', cursive;
+  font-size: 19px;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  animation: pulse-prompt 1.6s ease-in-out infinite;
+}
+
+.combo-badge {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  z-index: 10;
+  background: rgba(255, 200, 40, 0.92);
+  border: 2px solid #C9930A;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-family: 'Lakki Reddy', cursive;
+  font-size: 14px;
+  color: #5a3500;
+  white-space: nowrap;
+  display: none;
+}
+
+.main-menu-link {
+  position: absolute;
+  top: 14px;
+  right: 34px;
+  z-index: 9;
+  font-family: 'Lakki Reddy', cursive;
+  font-size: 15px;
+  color: #3a1e00;
+  text-decoration: underline;
+  cursor: pointer;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+  transition: opacity 0.15s;
+}
+.main-menu-link:hover { opacity: 0.7; }

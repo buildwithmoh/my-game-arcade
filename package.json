@@ -1,0 +1,13 @@
+{
+"name": "my-game-arcade",
+"version": "1.0.0",
+"description": "A personal arcade of custom games",
+"private": true,
+
+"scripts": {
+"start": "npx serve . -l 5500",
+"dev": "npx serve . l 5500"
+},
+
+"license": "UNLICENSED"
+}

@@ -1,0 +1,13 @@
+# Hidden system cache files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Code Editor and IDE setups
+.vscode/
+.idea/
+
+# Future deployment builds
+dist/
+build/
+node_modules/
