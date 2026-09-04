@@ -2,9 +2,6 @@
 
 Welcome to my personal game development collection. This repository serves as a ground to build different games and get a hang of things.
 
-## 🎮 Live Arcade Portfolio
-> **Global URL:** [https://vercel.app](https://vercel.app)
-
 ---
 
 ## 🎰 Current Games
