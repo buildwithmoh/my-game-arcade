@@ -1,18 +1,23 @@
-const W = 1440, H = 1024;
 const GROUND_Y        = 829;
+const WATER_TOP       = GROUND_Y + 80;
 const PLAYER_SIZE     = 156;
 const HITBOX_SIZE     = 112;
 const PLAYER_SCREEN_X = 211;
-const GAP_BTW         = 440;
+const GAP_BTW         = 130;
 const SCROLL_SPEED    = 3.2;
 const GRAVITY         = 1.34;
 const JUMP_FORCE      = -30.5;
+const AIR_BOOST_VY    = -22;
+const MAX_AIR_TAPS    = 3;
 const SPEED_RAMP_1000 = 0.15;
 const SPEED_RAMP_CAP  = 1.6;
 const FLOAT_CHANCE    = 0.35;
 const OBSTACLE_CHANCE = 0.38;
 
 const sn = (n) => Math.sin(n * 127.1 + 311.7) * 0.5 + 0.5;
+
+const createGroundSegment = (x, width) => ({ x, y: GROUND_Y, width, height: 146 });
+const createStartPlatform = () => createGroundSegment(-88, 702);
 
 function loadImg(src) { const i = new Image(); i.src = src; return i; }
 function waitImg(img) {
@@ -39,59 +44,134 @@ function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
 }
 
 function mountGameplay(character, color, props) {
-  const { initialLives, bestScore, onExit, onBestScore } = props;
+  const { initialLives, bestScore, onMainMenu, onPlayAgain, onBestScore } = props;
   const charSet = SPRITE_SETS[character] || SPRITE_SETS.female;
   const sprites = charSet[color] || charSet.red;
   const mount = document.getElementById("gameplayMount");
+  const mountRect = mount.getBoundingClientRect();
+
+  const H = 1024;
+  const MIN_LOGICAL_W = 500;
+  const computeScale = (w, h) => {
+    let s = h / H;
+    if (w / s < MIN_LOGICAL_W) s = w / MIN_LOGICAL_W;
+    return s;
+  };
+  let realW = Math.round(mountRect.width);
+  let realH = Math.round(mountRect.height);
+  let scale = computeScale(realW, realH);
+  let W = realW / scale;
 
   mount.innerHTML = `
-    <canvas id="gameCanvas" width="${W}" height="${H}" style="display:block;cursor:pointer;"></canvas>
+    <canvas id="gameCanvas" class="game-canvas" width="${realW}" height="${realH}"></canvas>
 
     <div id="prejumpPrompt" class="prejump-prompt">Tap / Space / ↑ to start</div>
 
-    <div style="position:absolute;top:18px;right:22px;display:flex;gap:6px;z-index:10;">
+    <div id="controlRow" class="control-row">
+      <button id="pauseButton" class="icon-button" aria-label="Pause">⏸</button>
+      <button id="soundButton" class="icon-button" aria-label="Mute sound">🔊</button>
+    </div>
+
+    <div id="pauseOverlay" class="pause-overlay">
+      <div class="pause-overlay-text">Paused</div>
+    </div>
+
+    <div id="hudRow" class="hud-row hud-row--gameplay">
       ${pillHTML("❤️", `<span id="hudLives">Lives: ${initialLives}</span>`)}
       ${pillHTML("🪙", `<span id="hudCoins">Coins: 0</span>`)}
       ${pillHTML("⭐", `<span id="hudScore">Score: 0</span>`)}
     </div>
 
-    <div id="comboBadge" class="combo-badge">🔥 x0 Combo!</div>
-
-    <div id="gameOverOverlay" style="position:absolute;inset:0;background:rgba(10,20,5,0.72);display:none;align-items:center;justify-content:center;z-index:20;">
-      <div class="card" style="animation:gameover-popin 0.45s cubic-bezier(0.34,1.56,0.64,1) both;">
-        <span style="position:absolute;top:-18px;left:82px;font-size:18px;z-index:8;animation:gameover-star-spin 2.4s linear infinite;display:inline-block;transform-origin:center;">⭐</span>
-        <span style="position:absolute;top:-12px;left:508px;font-size:22px;z-index:8;animation:gameover-star-spin 3s linear infinite;display:inline-block;transform-origin:center;">🌟</span>
-        <span style="position:absolute;top:-6px;left:310px;font-size:26px;z-index:8;animation:gameover-star-spin 3.6s linear infinite;display:inline-block;transform-origin:center;">✨</span>
+    <div id="gameOverOverlay">
+      <div class="card">
+        <span class="gameover-star gameover-star--1">🌟</span>
+        <span class="gameover-star gameover-star--2">✨</span>
 
         ${cardHeaderHTML()}
 
         <div id="mainMenuLink" class="main-menu-link">Main Menu</div>
 
-        <div class="card-interior" style="padding-left:28px;padding-right:28px;">
-          <div style="text-align:center;line-height:1;">
-            <p style="font-family:'Monofett', monospace;font-size:52px;margin:0;letter-spacing:3px;color:#000000;text-shadow:0 1px 0 rgba(255,255,255,0.25), 0 3px 10px rgba(0,0,0,0.35);">GAME OVER</p>
-            <p style="font-family:'Lakki Reddy', cursive;font-size:13px;margin:4px 0 0;color:#9b6a00;letter-spacing:0.5px;">You gave it your all — try again! 🌿</p>
+        <div class="card-interior card-interior--gameover">
+          <div class="gameover-heading">
+            <p class="gameover-title">GAME OVER</p>
+            <p class="gameover-subtitle">You gave it your all — try again! 🌿</p>
           </div>
 
-          <img id="goDizzy" alt="Dizzy character" style="height:158px;object-fit:contain;animation:gameover-wobble 2s ease-in-out infinite;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.28));" />
+          <img id="goDizzy" alt="Dizzy character" class="gameover-sprite" />
 
-          <div style="display:flex;gap:8px;">
+          <div class="stats-row">
             ${pillHTML("🪙", `Coins: <span id="goCoins">0</span>`)}
             ${pillHTML("⭐", `Score: <span id="goScore">0</span>`)}
           </div>
         </div>
 
-        <img id="playAgainImg" src="${IMG.playAgainButton}" alt="Play Again" style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:316px;z-index:7;cursor:pointer;filter:drop-shadow(0 3px 8px rgba(0,0,0,0.35));transition:transform 0.15s, filter 0.15s;" />
+        <img id="playAgainImg" src="${IMG.playAgainButton}" alt="Play Again" class="primary-button primary-button--play-again" />
       </div>
     </div>
   `;
+
+  watchCardFrameLoad(mount);
+
+  const hudRow = document.getElementById("hudRow");
+  const controlRow = document.getElementById("controlRow");
+  const pauseButton = document.getElementById("pauseButton");
+  const soundButton = document.getElementById("soundButton");
+  const pauseOverlay = document.getElementById("pauseOverlay");
+
+  let edgeInset = Math.round(22 * scale);
+
+  const positionHudChrome = () => {
+    edgeInset = Math.round(22 * scale);
+    hudRow.style.top = Math.round(18 * scale) + "px";
+    hudRow.style.right = edgeInset + "px";
+    hudRow.style.gap = Math.round(6 * scale) + "px";
+    controlRow.style.top = Math.round(18 * scale) + "px";
+    controlRow.style.left = edgeInset + "px";
+    controlRow.style.gap = Math.round(6 * scale) + "px";
+  };
+  positionHudChrome();
+
+  const fitHudChrome = () => {
+    hudRow.style.transform = "scale(1)";
+    controlRow.style.transform = "scale(1)";
+    const hudRect = hudRow.getBoundingClientRect();
+    const controlRect = controlRow.getBoundingClientRect();
+    const spacing = 12;
+    const available = realW - edgeInset * 2 - spacing;
+    if (hudRect.width + controlRect.width > available) {
+      const shrink = Math.max(0.5, available / (hudRect.width + controlRect.width));
+      hudRow.style.transform = `scale(${shrink})`;
+      hudRow.style.transformOrigin = "top right";
+      controlRow.style.transform = `scale(${shrink})`;
+      controlRow.style.transformOrigin = "top left";
+    }
+  };
+  fitHudChrome();
+
+  const syncSoundUI = () => {
+    soundButton.textContent = isMuted() ? "🔇" : "🔊";
+    soundButton.setAttribute("aria-label", isMuted() ? "Unmute sound" : "Mute sound");
+  };
+  syncSoundUI();
+
+  soundButton.addEventListener("click", () => {
+    const nextMuted = !isMuted();
+    setMuted(nextMuted);
+    syncSoundUI();
+    if (!nextMuted) playClick();
+  });
+
+  const gameOverCard = mount.querySelector("#gameOverOverlay .card");
+  gameOverCard.addEventListener("animationend", () => {
+    gameOverCard.classList.remove("popin");
+    fitCards();
+  });
 
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
   const hudLivesEl = document.getElementById("hudLives");
   const hudCoinsEl = document.getElementById("hudCoins");
   const hudScoreEl = document.getElementById("hudScore");
-  const comboBadge = document.getElementById("comboBadge");
   const prejumpPrompt = document.getElementById("prejumpPrompt");
   const gameOverOverlay = document.getElementById("gameOverOverlay");
   const goDizzy = document.getElementById("goDizzy");
@@ -99,21 +179,31 @@ function mountGameplay(character, color, props) {
   const goScoreEl = document.getElementById("goScore");
   const playAgainImg = document.getElementById("playAgainImg");
   const mainMenuLink = document.getElementById("mainMenuLink");
-  mainMenuLink.addEventListener("click", () => onExit());
-  mainMenuLink.addEventListener("mouseenter", () => { mainMenuLink.style.opacity = "0.7"; });
-  mainMenuLink.addEventListener("mouseleave", () => { mainMenuLink.style.opacity = "1"; });
+  mainMenuLink.addEventListener("click", () => { playClick(); onMainMenu(); });
+
+  const resizeCanvas = () => {
+    const rect = mount.getBoundingClientRect();
+    realW = Math.round(rect.width);
+    realH = Math.round(rect.height);
+    scale = computeScale(realW, realH);
+    W = realW / scale;
+    canvas.width = realW;
+    canvas.height = realH;
+    positionHudChrome();
+    fitHudChrome();
+    fitCards();
+  };
+
+  const onOrientationChange = () => setTimeout(resizeCanvas, 50);
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("orientationchange", onOrientationChange);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", resizeCanvas);
+  }
 
   goDizzy.src = sprites.dizzy;
 
-  playAgainImg.addEventListener("mouseenter", () => {
-    playAgainImg.style.transform = "translateX(-50%) scale(1.05)";
-    playAgainImg.style.filter = "drop-shadow(0 6px 16px rgba(0,0,0,0.5)) brightness(1.07)";
-  });
-  playAgainImg.addEventListener("mouseleave", () => {
-    playAgainImg.style.transform = "translateX(-50%)";
-    playAgainImg.style.filter = "drop-shadow(0 3px 8px rgba(0,0,0,0.35))";
-  });
-  playAgainImg.addEventListener("click", () => onExit());
+  playAgainImg.addEventListener("click", () => { playStart(); onPlayAgain(); });
 
   const spr = {
     idle:  loadImg(sprites.idle),
@@ -128,17 +218,18 @@ function mountGameplay(character, color, props) {
     running: false,
     worldX: 0,
     nextSpawnX: 614,
-    platforms: [{ x: -88, y: GROUND_Y, width: 702, height: 146 }],
+    platforms: [createStartPlatform()],
     obstacles: [],
     coins: [],
     particles: [],
     player: {
       x: PLAYER_SCREEN_X, y: GROUND_Y - PLAYER_SIZE,
-      vy: 0, onGround: true, jumpsRemaining: 2,
+      vy: 0, onGround: true, airTapsLeft: 0,
       facingSquash: 1, hurtTimer: 0,
+      inWater: false, waterTimer: 0,
     },
     lives: initialLives,
-    score: 0, coinsCollected: 0, combo: 0,
+    score: 0, coinsCollected: 0,
     best: bestScore,
   });
 
@@ -150,12 +241,6 @@ function mountGameplay(character, color, props) {
     hudLivesEl.textContent = `Lives: ${g.lives}`;
     hudCoinsEl.textContent = `Coins: ${g.coinsCollected}`;
     hudScoreEl.textContent = `Score: ${g.score}`;
-    if (g.combo >= 2) {
-      comboBadge.textContent = `🔥 x${g.combo} Combo!`;
-      comboBadge.style.display = "block";
-    } else {
-      comboBadge.style.display = "none";
-    }
   };
   syncHUD();
 
@@ -165,18 +250,30 @@ function mountGameplay(character, color, props) {
     while (g.nextSpawnX < viewRight + 500) {
       const nx = g.nextSpawnX;
       const platW = 280 + Math.floor(Math.random() * 240);
-      g.platforms.push({ x: nx, y: GROUND_Y, width: platW, height: 146 });
 
+      let holeStart = null, holeEnd = null;
       if (Math.random() < FLOAT_CHANCE) {
         const fW = 180 + Math.floor(Math.random() * 120);
         const fY = GROUND_Y - 230 - Math.floor(Math.random() * 130);
         const fX = nx + Math.floor(Math.random() * (platW - fW - 20));
         g.platforms.push({ x: fX, y: fY, width: fW, height: 28 });
+        holeStart = fX;
+        holeEnd = fX + fW;
       }
+
+      if (holeStart !== null) {
+        if (holeStart > nx) g.platforms.push(createGroundSegment(nx, holeStart - nx));
+        if (holeEnd < nx + platW) g.platforms.push(createGroundSegment(holeEnd, nx + platW - holeEnd));
+      } else {
+        g.platforms.push(createGroundSegment(nx, platW));
+      }
+
       if (Math.random() < OBSTACLE_CHANCE) {
         const oW = 52, oH = 78;
         const oX = nx + 90 + Math.floor(Math.random() * Math.max(10, platW - 200));
-        g.obstacles.push({ x: oX, y: GROUND_Y - oH, width: oW, height: oH });
+        if (holeStart === null || oX + oW < holeStart || oX > holeEnd) {
+          g.obstacles.push({ x: oX, y: GROUND_Y - oH, width: oW, height: oH });
+        }
       }
       const numCoins = 3 + Math.floor(Math.random() * 4);
       const arcBase = nx + 50;
@@ -218,23 +315,35 @@ function mountGameplay(character, color, props) {
     const g = gs();
     if (!g.running) return;
     const p = g.player;
-    if (p.jumpsRemaining > 0) {
-      const second = p.jumpsRemaining === 1;
-      p.vy = JUMP_FORCE * (second ? 0.82 : 1);
+    if (p.onGround) {
+      p.vy = JUMP_FORCE;
       p.onGround = false;
-      p.jumpsRemaining -= 1;
+      p.airTapsLeft = MAX_AIR_TAPS;
       p.facingSquash = 0.75;
+      playJump();
+    } else if (p.airTapsLeft > 0 && p.vy > AIR_BOOST_VY) {
+      p.vy = AIR_BOOST_VY;
+      p.airTapsLeft -= 1;
+      p.facingSquash = 0.85;
+      playJump();
     }
   };
 
   let gameOverFired = false;
 
-  const loseLife = () => {
+  const resetLevelToStart = () => {
     const g = gs();
-    if (!g.running) return;
-    g.combo = 0;
-    g.player.hurtTimer = 40;
-    g.lives -= 1;
+    g.worldX = 0;
+    g.nextSpawnX = 614;
+    g.platforms = [createStartPlatform()];
+    g.obstacles = [];
+    g.coins = [];
+    g.particles = [];
+    g.running = false;
+  };
+
+  const finishLifeLoss = () => {
+    const g = gs();
     if (g.lives <= 0) {
       g.running = false;
       if (g.score > g.best) {
@@ -246,17 +355,67 @@ function mountGameplay(character, color, props) {
         gameOverFired = true;
         goCoinsEl.textContent = g.coinsCollected;
         goScoreEl.textContent = g.score;
-        gameOverOverlay.style.display = "flex";
+        gameOverOverlay.classList.add("show");
+        controlRow.classList.add("is-hidden");
+        prepareCardEntrance(gameOverCard);
+        gameOverCard.classList.add("popin");
+        playGameOver();
       }
+    } else {
+      resetLevelToStart();
+      resetPlayerPos();
+      prejumpPrompt.classList.remove("is-hidden");
     }
     syncHUD();
+  };
+
+  const loseLife = () => {
+    const g = gs();
+    if (!g.running) return;
+    g.player.hurtTimer = 40;
+    g.lives -= 1;
+    playHurt();
+    finishLifeLoss();
+  };
+
+  const WATER_STRUGGLE_FRAMES = 180;
+
+  const fallIntoWater = () => {
+    const g = gs();
+    if (!g.running || g.player.inWater) return;
+    const p = g.player;
+    p.inWater = true;
+    p.waterTimer = WATER_STRUGGLE_FRAMES;
+    p.vy = 0;
+    p.y = GROUND_Y + 60;
+    g.lives -= 1;
+    g.running = false;
+    playHurt();
+    syncHUD();
+  };
+
+  const updateWaterCountdown = () => {
+    const g = gs();
+    const p = g.player;
+    if (!p.inWater || paused) return;
+    p.waterTimer -= 1;
+    if (Math.random() < 0.15) {
+      spawnParticles(p.x + g.worldX + PLAYER_SIZE / 2, GROUND_Y + 95);
+    }
+    if (p.waterTimer <= 0) {
+      p.inWater = false;
+      finishLifeLoss();
+    }
   };
 
   const resetPlayerPos = () => {
     const g = gs();
     g.player.y = GROUND_Y - PLAYER_SIZE;
     g.player.vy = 0;
-    g.player.jumpsRemaining = 2;
+    g.player.onGround = true;
+    g.player.airTapsLeft = 0;
+    g.player.inWater = false;
+    g.player.waterTimer = 0;
   };
 
   const updatePlayer = () => {
@@ -267,16 +426,16 @@ function mountGameplay(character, color, props) {
     p.y += p.vy;
     p.onGround = false;
     for (const plat of g.platforms) {
-      const withinX = playerWorldX + PLAYER_SIZE > plat.x && playerWorldX < plat.x + plat.width;
+      const withinX = playerWorldX + HITBOX_SIZE > plat.x && playerWorldX < plat.x + plat.width;
       const feetY = p.y + PLAYER_SIZE;
       const wasAbove = feetY - p.vy <= plat.y + 2;
       const landing = p.vy >= 0 && feetY >= plat.y && feetY <= plat.y + plat.height + 14;
       if (withinX && landing && wasAbove) {
         p.y = plat.y - PLAYER_SIZE; p.vy = 0; p.onGround = true;
-        p.jumpsRemaining = 2; p.facingSquash = 1.25; break;
+        p.airTapsLeft = 0; p.facingSquash = 1.25; break;
       }
     }
-    if (p.y > GROUND_Y + 260) { loseLife(); resetPlayerPos(); }
+    if (p.y > GROUND_Y + 90) { fallIntoWater(); return; }
     p.facingSquash += (1 - p.facingSquash) * 0.2;
     if (p.hurtTimer > 0) p.hurtTimer -= 1;
 
@@ -284,7 +443,7 @@ function mountGameplay(character, color, props) {
       const hOff = (PLAYER_SIZE - HITBOX_SIZE) / 2;
       for (const o of g.obstacles) {
         if (rectsOverlap(playerWorldX + hOff, p.y + hOff, HITBOX_SIZE, HITBOX_SIZE, o.x, o.y, o.width, o.height)) {
-          loseLife(); resetPlayerPos(); break;
+          loseLife(); break;
         }
       }
     }
@@ -295,10 +454,9 @@ function mountGameplay(character, color, props) {
       if (Math.sqrt(dx * dx + dy * dy) < c.radius + HITBOX_SIZE / 2) {
         c.collected = true;
         g.coinsCollected += 1;
-        g.combo += 1;
-        const bonus = Math.floor(g.combo / 5) * 5;
-        g.score += 10 + bonus;
+        g.score += 10;
         spawnParticles(c.x, c.y);
+        playCoin();
         syncHUD();
       }
     }
@@ -352,46 +510,8 @@ function mountGameplay(character, color, props) {
     });
   };
 
-  const drawPine = (bx, by, s) => {
-    const tw = 16 * s, th = 58 * s;
-    ctx.fillStyle = "#6A3C18";
-    ctx.fillRect(bx - tw / 2, by - th, tw, th);
-    const tiers = [
-      { w: 104 * s, h: 50 * s, c: "#236022" },
-      { w: 82 * s, h: 44 * s, c: "#2B762C" },
-      { w: 60 * s, h: 38 * s, c: "#358736" },
-      { w: 37 * s, h: 32 * s, c: "#3F9C40" },
-    ];
-    let ty = by - th + 10 * s;
-    for (const t of tiers) {
-      ctx.fillStyle = t.c;
-      ctx.beginPath();
-      ctx.moveTo(bx, ty - t.h);
-      ctx.lineTo(bx - t.w / 2, ty);
-      ctx.lineTo(bx + t.w / 2, ty);
-      ctx.closePath(); ctx.fill();
-      ty -= t.h * 0.50;
-    }
-  };
-
-  const treeDefs = [
-    { bx: 72, by: GROUND_Y + 5, s: 1.08 },
-    { bx: 174, by: GROUND_Y + 3, s: 0.87 },
-    { bx: 1374, by: GROUND_Y + 5, s: 1.04 },
-    { bx: 1460, by: GROUND_Y + 3, s: 0.86 },
-  ];
-  const drawTrees = (worldX) => {
-    for (const t of treeDefs) {
-      let tx = t.bx - worldX * 0.38;
-      tx = ((tx % W) + W) % W;
-      if (t.bx < 500 && tx > 450) tx -= W;
-      if (t.bx > 900 && tx < 900) tx += W;
-      drawPine(tx, t.by, t.s);
-    }
-  };
-
   const drawWater = (t) => {
-    const top = GROUND_Y + 80;
+    const top = WATER_TOP;
     ctx.fillStyle = "#1B5E8A";
     ctx.fillRect(0, top, W, H - top);
     const passes = [
@@ -416,6 +536,31 @@ function mountGameplay(character, color, props) {
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
+  };
+
+  const sharkBases = [700, 1300];
+  const drawSharks = (worldX, t) => {
+    const waterTop = WATER_TOP;
+    sharkBases.forEach((base, i) => {
+      const loopW = W + 300;
+      const speed = 0.7 + i * 0.06;
+      const sx = (((base - worldX * speed) % loopW) + loopW) % loopW - 150;
+      const wobble = Math.sin(t * 1.2 + i * 3) * 14;
+      const sy = waterTop + 6;
+      ctx.fillStyle = "#4A5560";
+      ctx.beginPath();
+      ctx.moveTo(sx + wobble - 10, sy + 10);
+      ctx.quadraticCurveTo(sx + wobble, sy - 22, sx + wobble + 10, sy + 10);
+      ctx.quadraticCurveTo(sx + wobble, sy + 4, sx + wobble - 10, sy + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx + wobble - 22, sy + 12);
+      ctx.quadraticCurveTo(sx + wobble, sy + 6, sx + wobble + 22, sy + 12);
+      ctx.stroke();
+    });
   };
 
   const drawCanopy = () => {
@@ -529,9 +674,39 @@ function mountGameplay(character, color, props) {
     ctx.globalAlpha = 1;
   };
 
+  const drawFittedSprite = (sprite, inset, boxX, boxY) => {
+    const ratio = Math.min(PLAYER_SIZE / sprite.naturalWidth, PLAYER_SIZE / sprite.naturalHeight);
+    const sw = sprite.naturalWidth * ratio;
+    const sh = sprite.naturalHeight * ratio;
+    const spriteScale = sh / sprite.naturalHeight;
+    const footShift = inset * spriteScale;
+    ctx.drawImage(sprite, boxX + (PLAYER_SIZE - sw) / 2, boxY + PLAYER_SIZE - sh + footShift, sw, sh);
+  };
+
   const drawPlayer = () => {
     const g = gs();
     const p = g.player;
+
+    if (p.inWater) {
+      const bobY = Math.sin(frame * 0.25) * 6;
+      const wobble = Math.sin(frame * 0.18) * 0.09;
+      const boxX = p.x;
+      const boxY = p.y + bobY;
+      if (sprReady.fall) {
+        const cx = boxX + PLAYER_SIZE / 2;
+        const cy = boxY + PLAYER_SIZE / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(wobble);
+        ctx.translate(-cx, -cy);
+        drawFittedSprite(spr.fall, spr.fallInset, boxX, boxY);
+        ctx.restore();
+        ctx.fillStyle = "rgba(27, 94, 138, 0.5)";
+        ctx.fillRect(boxX - 12, boxY + PLAYER_SIZE * 0.6, PLAYER_SIZE + 24, PLAYER_SIZE * 0.55);
+      }
+      return;
+    }
+
     const hurt = p.hurtTimer > 0;
     const air = !p.onGround;
     let sprite = spr.idle, ready = sprReady.idle, inset = spr.idleInset;
@@ -541,12 +716,7 @@ function mountGameplay(character, color, props) {
     const boxX = p.x;
     const boxY = p.y + bob;
     if (ready) {
-      const ratio = Math.min(PLAYER_SIZE / sprite.naturalWidth, PLAYER_SIZE / sprite.naturalHeight);
-      const sw = sprite.naturalWidth * ratio;
-      const sh = sprite.naturalHeight * ratio;
-      const scale = sh / sprite.naturalHeight;
-      const footShift = inset * scale;
-      ctx.drawImage(sprite, boxX + (PLAYER_SIZE - sw) / 2, boxY + PLAYER_SIZE - sh + footShift, sw, sh);
+      drawFittedSprite(sprite, inset, boxX, boxY);
     } else {
       ctx.fillStyle = "#2f6fed";
       ctx.fillRect(boxX, boxY, PLAYER_SIZE, PLAYER_SIZE);
@@ -554,9 +724,10 @@ function mountGameplay(character, color, props) {
   };
 
   const handleJumpInput = () => {
-    if (gameOverFired) return;
+    if (gameOverFired || paused) return;
     const g = gs();
-    if (!g.running) { g.running = true; prejumpPrompt.style.display = "none"; }
+    if (g.player.inWater) return;
+    if (!g.running) { g.running = true; prejumpPrompt.classList.add("is-hidden"); }
     doJump();
   };
   const onKey = (e) => {
@@ -571,6 +742,31 @@ function mountGameplay(character, color, props) {
   let frame = 0;
   let rafId = 0;
   let stopped = false;
+  let paused = false;
+  let tabHidden = false;
+  let userPaused = false;
+
+  const syncPauseUI = () => {
+    pauseButton.textContent = userPaused ? "▶" : "⏸";
+    pauseButton.setAttribute("aria-label", userPaused ? "Resume" : "Pause");
+    pauseOverlay.classList.toggle("show", userPaused);
+  };
+
+  pauseButton.addEventListener("click", () => {
+    if (gameOverFired) return;
+    playClick();
+    userPaused = !userPaused;
+    paused = tabHidden || userPaused;
+    syncPauseUI();
+  });
+
+  pauseOverlay.addEventListener("click", () => {
+    if (!userPaused) return;
+    playClick();
+    userPaused = false;
+    paused = tabHidden || userPaused;
+    syncPauseUI();
+  });
 
   const loop = () => {
     if (stopped) return;
@@ -578,7 +774,7 @@ function mountGameplay(character, color, props) {
     const t = frame * 0.05;
     const g = gs();
 
-    if (g.running) {
+    if (g.running && !paused) {
       const ramp = Math.min(SPEED_RAMP_CAP, 1 + (g.worldX / 1000) * SPEED_RAMP_1000);
       g.worldX += SCROLL_SPEED * ramp;
       ensureLevelAhead();
@@ -586,7 +782,16 @@ function mountGameplay(character, color, props) {
       updatePlayer();
       updateParticles();
     }
+    updateWaterCountdown();
+    if (g.player.inWater) updateParticles();
 
+    const letterboxGap = realH - scale * H;
+    if (letterboxGap > 0.5) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = "#4BBCD8";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.setTransform(scale, 0, 0, scale, 0, letterboxGap / 2);
     ctx.clearRect(0, 0, W, H);
     const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
     sky.addColorStop(0, "#4BBCD8");
@@ -597,14 +802,14 @@ function mountGameplay(character, color, props) {
 
     drawClouds(g.worldX);
     drawHills(g.worldX);
-    drawTrees(g.worldX);
     drawWater(t);
+    drawSharks(g.worldX, t);
     drawPlatforms();
     drawObstacles();
     drawCoins();
     drawParticles();
     drawPlayer();
-    if (!g.running) drawStartSign();
+    if (!g.running && g.worldX === 0) drawStartSign();
     drawCanopy();
     drawVines();
 
@@ -618,9 +823,21 @@ function mountGameplay(character, color, props) {
     if (!stopped) rafId = requestAnimationFrame(loop);
   });
 
-  return function cleanup() {
-    stopped = true;
-    cancelAnimationFrame(rafId);
-    window.removeEventListener("keydown", onKey);
+  return {
+    cleanup() {
+      stopped = true;
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("orientationchange", onOrientationChange);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", resizeCanvas);
+      }
+    },
+    setPaused(value) {
+      tabHidden = value;
+      paused = tabHidden || userPaused;
+      syncPauseUI();
+    },
   };
 }
