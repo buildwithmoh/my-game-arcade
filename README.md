@@ -9,4 +9,4 @@ Welcome to my personal game development collection. This repository serves as a 
 Track game progress and live links below:
 
 - [ ] **Game 01: Ahh Runner Quest** | 🏃‍♂️ Endless side-scrolling obstacle avoidance game.
-  - 🌐 Live link: [Play Ahh Runner Quest](https://ahh-game.vercel.app/))
+  - 🌐 Live link: [Play Ahh Runner Quest](https://ahh-game.vercel.app/)
